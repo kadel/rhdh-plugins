@@ -1,0 +1,7 @@
+plugins:
+  - image: "quay.io/tkral/backstage-community-plugin-quay:1.15.0"
+    title: "Quay Plugin"
+    description: "A plugin to show Quay data"
+  - image: "quay.io/tkral/backstage-community-plugin-scaffolder-backend-module-quay:2.3.0"
+    title: "Quay Scaffolder Backend Module"
+    description: "A backend module for scaffolding Quay plugins"
