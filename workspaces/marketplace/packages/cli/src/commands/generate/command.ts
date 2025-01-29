@@ -33,6 +33,7 @@ import {
   MARKETPLACE_API_VERSION,
   MarketplaceKinds,
 } from '@red-hat-developer-hub/backstage-plugin-marketplace-common';
+import { LocationEntityV1alpha1 } from '@backstage/catalog-model';
 
 const exec = promisify(execFile);
 
@@ -41,9 +42,9 @@ const DEFAULT_LIFECYCLE = 'production';
 const DEFAULT_TYPE = 'plugin';
 
 export default async (opts: OptionValues) => {
-  const { indexFile, outputDirectory } = opts as {
+  const { indexFile, outputDir } = opts as {
     indexFile: string;
-    outputDirectory?: string;
+    outputDir?: string;
   };
 
   const containerTool = 'skopeo';
@@ -95,7 +96,7 @@ export default async (opts: OptionValues) => {
             apiVersion: MARKETPLACE_API_VERSION,
             kind: MarketplaceKinds.plugin,
             metadata: {
-              name: data.name,
+              name: entityName(key),
               title: plugin.title,
               description: plugin.description,
               links: [
@@ -119,7 +120,7 @@ export default async (opts: OptionValues) => {
               owner: DEFAULT_OWNER,
               packages: [
                 {
-                  name: data.name,
+                  name: `oci://${plugin.image}`,
                   version: data.version,
                   backstage: {
                     role: data.backstage.role,
@@ -134,17 +135,31 @@ export default async (opts: OptionValues) => {
     }
   }
 
-  if (outputDirectory) {
-    const outputDirPath = path.resolve(outputDirectory);
+  if (outputDir) {
+    const outputDirPath = path.resolve(outputDir);
     await fs.ensureDir(outputDirPath);
 
+    const location: LocationEntityV1alpha1 = {
+      apiVersion: 'backstage.io/v1alpha1',
+      kind: 'Location',
+      metadata: {
+        name: 'plugins',
+      },
+      spec: {
+        targets: [],
+      },
+    };
+
     for (const entity of entities) {
-      const entityPath = path.join(
-        outputDirPath,
-        `${entity.metadata.name}.yaml`,
-      );
+      const filename = `${entity.metadata.name}.yaml`;
+      const entityPath = path.join(outputDirPath, filename);
       await fs.writeFile(entityPath, yaml.dump(entity));
+      location.spec.targets?.push(filename);
     }
+    await fs.writeFile(
+      path.join(outputDirPath, 'all.yaml'),
+      yaml.dump(location),
+    );
   } else {
     for (const entity of entities) {
       console.log(yaml.dump(entity));
@@ -180,4 +195,21 @@ async function inspectImage(
     );
     return undefined;
   }
+}
+
+/**
+ * Converts a given string into a valid entity name
+ */
+function entityName(str: string): string {
+  let name = str
+    .toLowerCase()
+    .replace(/[^a-z0-9-_.]/g, '-') // Replace invalid characters with '-'
+    .replace(/^-+|-+$/g, '') // Remove leading and trailing '-'
+    .replace(/-+/g, '-'); // Replace multiple '-' with a single '-'
+
+  if (name.length > 63) {
+    name = name.substring(0, 63);
+  }
+
+  return name;
 }

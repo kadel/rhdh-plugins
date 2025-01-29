@@ -10756,6 +10756,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "@red-hat-developer-hub/marketplace-cli@workspace:packages/cli"
   dependencies:
+    "@backstage/catalog-model": ^1.7.0
     "@backstage/cli": ^0.26.11
     "@backstage/cli-node": ^0.2.7
     "@backstage/errors": ^1.2.4
