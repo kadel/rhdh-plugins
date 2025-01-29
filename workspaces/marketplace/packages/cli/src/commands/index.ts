@@ -40,10 +40,14 @@ export const registerCommands = (program: Command) => {
     .description(
       'Generate a Plugin entities for the marketplace. By default, it will output entities to the standard output',
     )
-    .requiredOption('--index-file [path]', 'Path to the index file')
+    .option('--container-index [path]', 'Path to the container index file')
+    .option(
+      '--default-dynamic-plugins [path]',
+      'Path to the default dynamic plugins file',
+    )
     .option(
       '--output-dir [path]',
       'Path to the output directory. Each entity will be written to a separate file',
     )
-    .action(lazy(() => import('./generate/command').then(m => m.default)));
+    .action(lazy(() => import('./generate').then(m => m.default)));
 };

@@ -29,9 +29,9 @@ import {
   PluginRegistryMetadata,
 } from './types';
 import {
-  MarketplacePlugin,
   MARKETPLACE_API_VERSION,
   MarketplaceKinds,
+  MarketplacePackage,
 } from '@red-hat-developer-hub/backstage-plugin-marketplace-common';
 import { LocationEntityV1alpha1 } from '@backstage/catalog-model';
 
@@ -42,8 +42,9 @@ const DEFAULT_LIFECYCLE = 'production';
 const DEFAULT_TYPE = 'plugin';
 
 export default async (opts: OptionValues) => {
-  const { indexFile, outputDir } = opts as {
-    indexFile: string;
+  const { containerIndex, defaultDynamicPlugins, outputDir } = opts as {
+    containerIndex: string;
+    defaultDynamicPlugins: string;
     outputDir?: string;
   };
 
@@ -60,7 +61,7 @@ export default async (opts: OptionValues) => {
     throw new ExitCodeError(1);
   }
 
-  const indexFilePath = path.resolve(indexFile);
+  const indexFilePath = path.resolve(containerIndex);
   const indexFileContent = await fs.readFile(indexFilePath, 'utf8');
 
   // parse yaml file
@@ -68,7 +69,7 @@ export default async (opts: OptionValues) => {
     indexFileContent,
   ) as RegistryIndex;
 
-  const entities: MarketplacePlugin[] = [];
+  const entities: MarketplacePackage[] = [];
 
   for (const plugin of registryIndex.plugins) {
     const image = parseImage(plugin.image);
@@ -94,7 +95,7 @@ export default async (opts: OptionValues) => {
 
           entities.push({
             apiVersion: MARKETPLACE_API_VERSION,
-            kind: MarketplaceKinds.plugin,
+            kind: MarketplaceKinds.package,
             metadata: {
               name: entityName(key),
               title: plugin.title,
@@ -118,16 +119,13 @@ export default async (opts: OptionValues) => {
               type: DEFAULT_TYPE,
               lifecycle: DEFAULT_LIFECYCLE,
               owner: DEFAULT_OWNER,
-              packages: [
-                {
-                  name: `oci://${plugin.image}`,
-                  version: data.version,
-                  backstage: {
-                    role: data.backstage.role,
-                    'supported-versions': data.backstage['supported-versions'],
-                  },
-                },
-              ],
+              packageName: key,
+              version: data.version,
+              dynamicArtifact: `oci://${plugin.image}`,
+              backstage: {
+                role: data.backstage.role,
+                'supported-versions': data.backstage['supported-versions'],
+              },
             },
           });
         }
