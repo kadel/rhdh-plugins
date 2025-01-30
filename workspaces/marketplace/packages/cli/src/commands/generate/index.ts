@@ -14,20 +14,11 @@
  * limitations under the License.
  */
 
-import chalk from 'chalk';
 import fs from 'fs-extra';
 import { OptionValues } from 'commander';
 import path from 'path';
-import { ExitCodeError } from '../../lib/errors';
-import { promisify } from 'util';
-import { execFile } from 'child_process';
 import yaml from 'js-yaml';
-import {
-  ImageInfo,
-  ImageMetadata,
-  RegistryIndex,
-  PluginRegistryMetadata,
-} from './types';
+import { PackageMetadata, PackageInfo } from './types';
 import {
   MARKETPLACE_API_VERSION,
   MarketplaceKinds,
@@ -35,102 +26,116 @@ import {
 } from '@red-hat-developer-hub/backstage-plugin-marketplace-common';
 import { LocationEntityV1alpha1 } from '@backstage/catalog-model';
 
-const exec = promisify(execFile);
-
-const DEFAULT_OWNER = 'system/rhdh';
 const DEFAULT_LIFECYCLE = 'production';
 const DEFAULT_TYPE = 'plugin';
 
 export default async (opts: OptionValues) => {
-  const { containerIndex, defaultDynamicPlugins, outputDir } = opts as {
-    containerIndex: string;
-    defaultDynamicPlugins: string;
+  const {
+    // containerIndex,
+    defaultDynamicPlugins,
+    outputDir,
+    namespace,
+    owner,
+  } = opts as {
+    // containerIndex?: string;
+    defaultDynamicPlugins?: string;
     outputDir?: string;
+    namespace?: string;
+    owner?: string;
   };
 
-  const containerTool = 'skopeo';
-
-  try {
-    await exec(containerTool, ['--version']);
-  } catch {
-    console.error(
-      chalk.red(
-        `The provided container tool (${containerTool}) is not installed, please install it.`,
-      ),
-    );
-    throw new ExitCodeError(1);
-  }
-
-  const indexFilePath = path.resolve(containerIndex);
-  const indexFileContent = await fs.readFile(indexFilePath, 'utf8');
-
-  // parse yaml file
-  const registryIndex: RegistryIndex = yaml.load(
-    indexFileContent,
-  ) as RegistryIndex;
-
   const entities: MarketplacePackage[] = [];
+  const packages: PackageMetadata[] = [];
 
-  for (const plugin of registryIndex.plugins) {
-    const image = parseImage(plugin.image);
-    const meta = await inspectImage(containerTool, image);
+  // TOOD: add later once we have stable image annoation structure
+  // if (containerIndex) {
+  //   const indexFilePath = path.resolve(containerIndex);
+  //   const indexFileContent = await fs.readFile(indexFilePath, 'utf8');
 
-    const dynamiPackageAnnotationValue =
-      meta?.annotations['io.backstage.dynamic-packages'] || '';
-    if (!dynamiPackageAnnotationValue) {
-      console.log(`No dynamic packages found in image ${plugin.image}`);
-      continue;
-    }
+  //   // parse yaml file
+  //   const registryIndex: ContainerRegistryIndex = yaml.load(
+  //     indexFileContent,
+  //   ) as ContainerRegistryIndex;
 
-    const decodedValue = Buffer.from(
-      dynamiPackageAnnotationValue,
-      'base64',
-    ).toString('utf8');
-    const dynamicPackages: PluginRegistryMetadata = JSON.parse(decodedValue);
+  //   for (const plugin of registryIndex.plugins) {
+  //     packages.push(...await getPackageDataFromImage(plugin.image))
+  //   }
+  // }
 
-    for (const packageInfo of dynamicPackages) {
-      for (const key in packageInfo) {
-        if (Object.hasOwn(packageInfo, key)) {
-          const data = packageInfo[key];
+  if (defaultDynamicPlugins) {
+    const defaultDynamicPluginsPath = path.resolve(defaultDynamicPlugins);
+    // list all directories in the path, make sure to use only directories
+    const files = await fs.readdir(defaultDynamicPluginsPath, {
+      withFileTypes: true,
+    });
+    for (const file of files) {
+      if (file.isDirectory()) {
+        const packageJSONPath = path.join(
+          defaultDynamicPluginsPath,
+          file.name,
+          'package.json',
+        );
+        const packageJSON = (await fs.readJson(packageJSONPath)) as PackageInfo;
 
-          entities.push({
-            apiVersion: MARKETPLACE_API_VERSION,
-            kind: MarketplaceKinds.package,
-            metadata: {
-              name: entityName(key),
-              title: plugin.title,
-              description: plugin.description,
-              links: [
-                {
-                  url: data.homepage,
-                  title: 'Plugin Homepage',
-                },
-                {
-                  url: data.repository.url,
-                  title: 'Plugin Repository',
-                },
-                {
-                  url: data.bugs,
-                  title: 'Report Issues',
-                },
-              ],
-            },
-            spec: {
-              type: DEFAULT_TYPE,
-              lifecycle: DEFAULT_LIFECYCLE,
-              owner: DEFAULT_OWNER,
-              packageName: key,
-              version: data.version,
-              dynamicArtifact: `oci://${plugin.image}`,
-              backstage: {
-                role: data.backstage.role,
-                'supported-versions': data.backstage['supported-versions'],
-              },
-            },
-          });
-        }
+        packages.push(packageJSON);
       }
     }
+  }
+
+  for (const pkg of packages) {
+    console.log(pkg);
+
+    const partOf = pkg.backstage.pluginId || undefined;
+
+    // if package id plugin module, attach it to the parent plugin
+    // this doesn't work , for example using this rule with
+    // https://github.com/redhat-developer/rhdh/blob/main/dynamic-plugins/wrappers/roadiehq-scaffolder-backend-module-utils-dynamic/package.json#L14C18-L14C28
+    // it will result into a partOf: utils
+    // if (pkg.backstage.role === 'backend-plugin-module') {
+    //   const parts = pkg.name.split('-module-');
+    //   if (parts.length === 2) {
+    //     partOf = parts[1];
+    //   }
+    // }
+
+    const entity: MarketplacePackage = {
+      apiVersion: MARKETPLACE_API_VERSION,
+      kind: MarketplaceKinds.package,
+      metadata: {
+        name: entityName(pkg.name),
+        namespace: namespace,
+        title: pkg.name,
+        // description:
+        links: [
+          {
+            url: pkg.homepage,
+            title: 'Plugin Homepage',
+          },
+          {
+            url: pkg.repository.url,
+            title: 'Plugin Repository',
+          },
+          {
+            url: pkg.bugs,
+            title: 'Report Issues',
+          },
+        ],
+      },
+      spec: {
+        type: DEFAULT_TYPE,
+        lifecycle: DEFAULT_LIFECYCLE,
+        owner: owner,
+        packageName: pkg.name,
+        version: pkg.version,
+        // dynamicArtifact: `oci://${plugin.image}`,
+        backstage: {
+          role: pkg.backstage.role,
+          'supported-versions': pkg.backstage['supported-versions'],
+        },
+        partOf: partOf,
+      },
+    };
+    entities.push(entity);
   }
 
   if (outputDir) {
@@ -166,37 +171,8 @@ export default async (opts: OptionValues) => {
   }
 };
 
-function parseImage(imagePath: string): ImageInfo {
-  // TODO: validate imagePath
-  const parts = imagePath.split('/');
-  const registry = parts[0];
-  const imageParts = parts.slice(1).join('/').split(':');
-  const image = imageParts[0];
-  const tag = imageParts[1];
-  return { registry, image, tag };
-}
-
-async function inspectImage(
-  containerTool: string,
-  image: ImageInfo,
-): Promise<ImageMetadata | undefined> {
-  try {
-    const { stdout } = await exec(containerTool, [
-      'inspect',
-      '--raw',
-      `docker://${image.registry}/${image.image}:${image.tag}`,
-    ]);
-    return JSON.parse(stdout) as ImageMetadata;
-  } catch (e) {
-    console.error(
-      chalk.red(`Error encountered while inspecting plugin container: ${e}`),
-    );
-    return undefined;
-  }
-}
-
 /**
- * Converts a given string into a valid entity name
+ * Convert a given string into a valid entity name
  */
 function entityName(str: string): string {
   let name = str
@@ -210,4 +186,24 @@ function entityName(str: string): string {
   }
 
   return name;
+}
+
+/**
+ * Guess the correct package name from the dependencies list of a wrapper
+ */
+
+function guessPackageFromDependencies(
+  pkgname: string,
+  dependencies: string[],
+): string | undefined {
+  if (dependencies.length === 1) {
+    return dependencies[0];
+  }
+  for (const dep of dependencies) {
+    const convertedName = pkgname.replaceAll('/', '-').replaceAll('@', '');
+    if (dep.includes(convertedName)) {
+      return dep;
+    }
+  }
+  return undefined;
 }

@@ -26,6 +26,7 @@
     "@red-hat-developer-hub/cli": "portal:./workspaces/repo-tools/packages/cli",
     "@spotify/eslint-plugin": "^15.0.0",
     "@spotify/prettier-config": "^15.0.0",
+    "@types/fs-extra": "^11.0.4",
     "array-to-table": "^1.0.1",
     "chalk": "^5.4.1",
     "commander": "^13.1.0",

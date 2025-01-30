@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
+/**
+ * Structure of the container registry index file that is used as input for the
+ * generate command when you want to read the packages from images
+ */
+export interface ContainerRegistryIndex {
+  plugins: PluginRecord[];
+}
+
 export interface PluginRecord {
   image: string;
   title: string;
   description: string;
-}
-
-export interface RegistryIndex {
-  plugins: PluginRecord[];
 }
 
 export interface ImageInfo {
@@ -45,14 +49,31 @@ export interface ImageMetadata {
   };
 }
 
-// from image
-export type PluginRegistryMetadata = PluginInfo[];
+/**
+ * Data saved in the annotation 'io.backstage.dynamic-packages' of the image with the dynamic plugin
+ * when generated with janus-idp/cli package-dynamic-plugins command
+ */
+export type DynamicPackagesInfo = AnnotationPackageInfo[];
 
-export interface PluginInfo {
-  [key: string]: PluginMetadata;
+export interface AnnotationPackageInfo {
+  [key: string]: PackageMetadata;
 }
 
-export interface PluginRepository {
+export interface PackageMetadata {
+  name: string;
+  version: string;
+  description: string;
+  backstage: PluginBackstage;
+  homepage: string;
+  repository: PackageRepository;
+  license: string;
+  maintainers: string;
+  author: string;
+  bugs: string;
+  keywords: string[];
+}
+
+export interface PackageRepository {
   type: string;
   url: string;
   directory: string;
@@ -65,16 +86,9 @@ export interface PluginBackstage {
   pluginPackage: string;
 }
 
-export interface PluginMetadata {
-  name: string;
-  version: string;
-  description: string;
-  backstage: PluginBackstage;
-  homepage: string;
-  repository: PluginRepository;
-  license: string;
-  maintainers: string;
-  author: string;
-  bugs: string;
-  keywords: string[];
+/**
+ * Common information about packages, this is used as an input for generating  Package catalog entities
+ */
+export interface PackageInfo extends PackageMetadata {
+  dynamicArtifact: string;
 }
